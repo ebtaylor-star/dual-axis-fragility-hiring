@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dual-Axis Fragility in Algorithmic Hiring — Findings at a Glance</title>
+<style>
+  :root{
+    --navy:#1F3A5F;
+    --navy-deep:#12233b;
+    --gold:#C9973A;
+    --gold-light:#e8c98a;
+    --parchment:#FBF8F2;
+    --paper:#ffffff;
+    --ink:#232323;
+    --ink-soft:#54555c;
+    --rule:#dcd4c2;
+    --slate:#7A8B99;
+    --axis1:#2E74B5;
+    --axis1-light:#e3edf7;
+    --axis2:#6B4C9A;
+    --axis2-light:#ece6f3;
+    --good:#2E8B57;
+    --good-light:#e2f1e8;
+    --bad:#B0342D;
+    --bad-light:#f8e5e3;
+    --purple:#6B4C9A;
+    --sans: 'Avenir Next','Segoe UI',Helvetica,Arial,sans-serif;
+    --serif: 'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#e9e3d3;}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    display:flex;
+    justify-content:center;
+    padding:26px 12px;
+  }
+  .sheet{
+    width:1500px;
+    max-width:100%;
+    background:var(--parchment);
+    border:1px solid var(--rule);
+    box-shadow:0 10px 40px rgba(18,35,59,0.18);
+  }
+
+  /* ===== Header ===== */
+  .header{
+    background:linear-gradient(120deg,var(--navy-deep) 0%, var(--navy) 65%, #274b73 100%);
+    color:#f4efe2;
+    padding:26px 42px 22px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:24px;
+    position:relative;
+    overflow:hidden;
+  }
+  .header::after{
+    content:"";
+    position:absolute;inset:0;
+    background:radial-gradient(circle at 92% 0%, rgba(201,151,58,0.22), transparent 45%);
+    pointer-events:none;
+  }
+  .header .left .kicker{
+    font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold-light);
+    font-weight:700;margin-bottom:8px;
+  }
+  .header .left h1{
+    font-family:var(--serif);
+    font-size:32px;line-height:1.15;margin:0 0 8px;font-weight:600;max-width:820px;
+  }
+  .header .left .sub{
+    font-size:14px;color:#cfc7b2;max-width:760px;line-height:1.45;
+  }
+  .header .right{
+    text-align:right;font-size:12px;color:#cfc7b2;line-height:1.9;flex-shrink:0;
+  }
+  .header .right b{color:#f4efe2;}
+
+  .rq-strip{
+    background:var(--gold);
+    color:var(--navy-deep);
+    font-family:var(--serif);
+    font-style:italic;
+    font-size:15px;
+    padding:10px 42px;
+    line-height:1.4;
+  }
+  .rq-strip b{font-style:normal;font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-right:10px;}
+
+  /* ===== KPI strip ===== */
+  .kpi-strip{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:1px;
+    background:var(--rule);
+    border-bottom:1px solid var(--rule);
+  }
+  .kpi{
+    background:var(--paper);
+    padding:16px 18px 14px;
+    text-align:left;
+  }
+  .kpi .tag{
+    font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--slate);font-weight:700;margin-bottom:6px;
+  }
+  .kpi .val{
+    font-size:30px;font-weight:800;line-height:1;color:var(--navy-deep);letter-spacing:-.01em;
+  }
+  .kpi .val small{font-size:16px;font-weight:700;}
+  .kpi .verdict{
+    display:inline-block;margin-top:8px;font-size:10px;font-weight:800;letter-spacing:.05em;
+    padding:3px 8px;border-radius:2px;text-transform:uppercase;
+  }
+  .kpi .verdict.fail{background:var(--bad-light);color:var(--bad);}
+  .kpi .verdict.pass{background:var(--good-light);color:var(--good);}
+  .kpi .note{font-size:11px;color:var(--ink-soft);margin-top:7px;line-height:1.4;}
+
+  /* ===== Main grid ===== */
+  .main{
+    display:grid;
+    grid-template-columns:1.32fr 1fr;
+    gap:1px;
+    background:var(--rule);
+  }
+  .panel{background:var(--paper);padding:22px 26px 20px;}
+  .panel-title{
+    font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:2px;
+  }
+  .panel-sub{font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.4;}
+
+  /* signature slope chart */
+  .slope-wrap{display:flex;gap:18px;align-items:flex-start;}
+  .slope-chart{flex:0 0 auto;}
+  .slope-callout{
+    flex:1;
+    background:var(--navy-deep);
+    color:#f4efe2;
+    border-radius:4px;
+    padding:18px 20px;
+    align-self:stretch;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .slope-callout .headline{
+    font-family:var(--serif);font-style:italic;font-size:19px;line-height:1.35;margin:0 0 10px;color:#fff;
+  }
+  .slope-callout p{font-size:12.5px;line-height:1.55;color:#cfc7b2;margin:0;}
+  .slope-callout .hl{color:var(--gold-light);font-weight:700;}
+
+  .legend-row{display:flex;gap:22px;margin-top:10px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-soft);}
+  .legend-swatch{width:14px;height:3px;border-radius:2px;}
+
+  .panel-hero{display:flex;flex-direction:column;}
+  .pull-quote{
+    font-family:var(--serif);font-style:italic;font-size:16px;line-height:1.5;color:var(--navy-deep);
+    border-left:3px solid var(--gold);padding:4px 0 4px 18px;margin:22px 0 18px;
+  }
+  .pull-quote span{display:block;font-family:var(--sans);font-style:normal;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--slate);margin-top:8px;}
+  .mini-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:auto;padding-top:6px;border-top:1px solid var(--rule);}
+  .mini-stat{padding-top:10px;}
+  .mini-stat b{display:block;font-size:19px;color:var(--navy-deep);font-weight:800;margin-bottom:4px;}
+  .mini-stat span{font-size:11px;color:var(--ink-soft);line-height:1.4;}
+
+  /* Right column stacked panels */
+  .right-col{display:flex;flex-direction:column;gap:1px;background:var(--rule);}
+  .right-col .panel{padding:18px 24px 16px;}
+
+  /* feature importance mini bars */
+  .fi-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+  .fi-label{flex:0 0 118px;font-size:12px;color:var(--ink);font-weight:600;}
+  .fi-track{flex:1;height:16px;background:#f0ece0;border-radius:2px;overflow:hidden;position:relative;}
+  .fi-fill{height:100%;border-radius:2px;}
+  .fi-val{flex:0 0 40px;text-align:right;font-size:12px;font-weight:800;color:var(--navy-deep);}
+
+  /* gaming split bar */
+  .split-bar{height:30px;border-radius:3px;overflow:hidden;display:flex;margin-top:6px;box-shadow:inset 0 0 0 1px var(--rule);}
+  .split-seg{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;}
+  .split-seg.gaming{background:var(--bad);}
+  .split-seg.improve{background:var(--good);}
+
+  /* verdict card */
+  .verdict-card{
+    background:linear-gradient(135deg,var(--bad) 0%,#7a2f2f 100%);
+    color:#fff;border-radius:5px;padding:16px 18px;text-align:center;
+  }
+  .verdict-card .tier{font-family:var(--serif);font-size:24px;font-weight:700;letter-spacing:.02em;}
+  .verdict-card .crit{font-size:11px;color:#f3d9d9;margin-top:4px;}
+
+  .table-mini{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:10px;}
+  .table-mini th{text-align:left;color:var(--slate);font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:.06em;padding:4px 6px;border-bottom:1px solid var(--rule);}
+  .table-mini td{padding:6px 6px;border-bottom:1px solid var(--rule);}
+  .table-mini tr:last-child td{border-bottom:none;}
+  .table-mini .r{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+
+  /* Bottom strip: method + asks */
+  .bottom{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:1px;
+    background:var(--rule);
+    border-top:1px solid var(--rule);
+  }
+  .bottom .panel{padding:16px 24px;}
+  .bottom .panel-title{margin-bottom:8px;}
+  .method-list{list-style:none;margin:0;padding:0;font-size:12px;color:var(--ink);line-height:1.9;}
+  .method-list li{display:flex;justify-content:space-between;border-bottom:1px dotted var(--rule);padding:3px 0;}
+  .method-list li span:first-child{color:var(--ink-soft);}
+  .method-list li b{color:var(--navy-deep);}
+
+  .asks-list{margin:0;padding-left:18px;font-size:12px;line-height:1.65;color:var(--ink);}
+  .asks-list li{margin-bottom:6px;}
+
+  footer{
+    background:var(--navy-deep);color:#9aa5b5;font-size:10.5px;text-align:center;padding:10px 20px;letter-spacing:.02em;
+  }
+  footer b{color:#cfc7b2;}
+
+  @media print{
+    body{background:#fff;padding:0;}
+    .sheet{width:100%;box-shadow:none;border:none;}
+    @page{size:landscape;margin:8mm;}
+  }
+  @media (max-width:1180px){
+    .main{grid-template-columns:1fr;}
+    .right-col{display:contents;}
+    .bottom{grid-template-columns:1fr;}
+    .kpi-strip{grid-template-columns:repeat(2,1fr);}
+    .slope-wrap{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <!-- ===== HEADER ===== -->
+  <div class="header">
+    <div class="left">
+      <div class="kicker">Utica University · MSDS Capstone · Findings Summary</div>
+      <h1>Dual-Axis Fragility in Algorithmic Hiring</h1>
+      <div class="sub">An empirical audit of structural exclusion and adversarial exploitability in a random-forest hiring classifier trained on FairCVdb (N = 24,000).</div>
+    </div>
+    <div class="right">
+      <b>Elizabeth B. Taylor</b><br>
+      Advisor: Dr. Michael McCarthy<br>
+      August 2026
+    </div>
+  </div>
+  <div class="rq-strip"><b>Research Question</b>To what extent can a dual-axis auditing framework measure both algorithmic fairness (structural exclusion) and if the system can be gamed (adversarial exploitability)?</div>
+
+  <!-- ===== KPI STRIP ===== -->
+  <div class="kpi-strip">
+    <div class="kpi">
+      <div class="tag">Axis 1 · Run 1 (Biased Label)</div>
+      <div class="val">0.329</div>
+      <div class="verdict fail">Fails 0.80 threshold</div>
+      <div class="note">Demographic Parity Ratio — men 35.7% selected vs. women 11.8%.</div>
+    </div>
+    <div class="kpi">
+      <div class="tag">Axis 1 · Run 3 (Reweighed)</div>
+      <div class="val">0.813</div>
+      <div class="verdict pass">Passes threshold</div>
+      <div class="note">Reweighing closes the gap for a 1.3-point accuracy cost.</div>
+    </div>
+    <div class="kpi">
+      <div class="tag">Axis 2 · Model Fragility Index</div>
+      <div class="val">83.5<small>%</small></div>
+      <div class="verdict fail">vs. 11.7% random</div>
+      <div class="note">Share of rejected candidates flippable to "hire" in ≤2 edits.</div>
+    </div>
+    <div class="kpi">
+      <div class="tag">Axis 2 · After Mitigation</div>
+      <div class="val">87.0<small>%</small></div>
+      <div class="verdict fail">Up, not down</div>
+      <div class="note">The fairer model (Run 3) is slightly <i>more</i> gameable, not less.</div>
+    </div>
+    <div class="kpi">
+      <div class="tag">Gaming vs. Genuine Improvement</div>
+      <div class="val">89.0<small>%</small></div>
+      <div class="verdict fail">Gaming</div>
+      <div class="note">Share of flips from candidates who weren't unbiased-qualified.</div>
+    </div>
+  </div>
+
+  <!-- ===== MAIN GRID ===== -->
+  <div class="main">
+
+    <!-- LEFT: signature slope chart -->
+    <div class="panel panel-hero">
+      <div class="panel-title">The Central Finding</div>
+      <div class="panel-sub">Fixing Axis 1 (fairness) does not fix Axis 2 (security) — in this run, it made it slightly worse.</div>
+
+      <div class="slope-wrap">
+        <div class="slope-chart">
+          <svg width="460" height="260" viewBox="0 0 460 260" xmlns="http://www.w3.org/2000/svg">
+            <!-- axes -->
+            <line x1="60" y1="20" x2="60" y2="220" stroke="#cfc7ae" stroke-width="1"/>
+            <line x1="60" y1="220" x2="420" y2="220" stroke="#cfc7ae" stroke-width="1"/>
+            <!-- gridlines 0/50/100 -->
+            <line x1="60" y1="220" x2="420" y2="220" stroke="#e4ddc9" stroke-width="1"/>
+            <line x1="60" y1="120" x2="420" y2="120" stroke="#e4ddc9" stroke-width="1"/>
+            <line x1="60" y1="20"  x2="420" y2="20"  stroke="#e4ddc9" stroke-width="1"/>
+            <text x="52" y="224" text-anchor="end" font-size="9" fill="#9a9686" font-family="Avenir Next, sans-serif">0%</text>
+            <text x="52" y="124" text-anchor="end" font-size="9" fill="#9a9686" font-family="Avenir Next, sans-serif">50%</text>
+            <text x="52" y="24"  text-anchor="end" font-size="9" fill="#9a9686" font-family="Avenir Next, sans-serif">100%</text>
+
+            <!-- EEOC threshold dashed line at 80% => y=60 -->
+            <line x1="60" y1="60" x2="420" y2="60" stroke="#7A8B99" stroke-width="1.4" stroke-dasharray="5,4"/>
+            <text x="424" y="63" font-size="9.5" fill="#7A8B99" font-family="Avenir Next, sans-serif" font-weight="700">0.80 EEOC line</text>
+
+            <!-- column labels -->
+            <text x="60" y="240" text-anchor="middle" font-size="12" fill="#1F3A5F" font-family="Avenir Next, sans-serif" font-weight="700">Run 1</text>
+            <text x="60" y="252" text-anchor="middle" font-size="9.5" fill="#7A8B99" font-family="Avenir Next, sans-serif">biased, unmitigated</text>
+            <text x="420" y="240" text-anchor="middle" font-size="12" fill="#1F3A5F" font-family="Avenir Next, sans-serif" font-weight="700">Run 3</text>
+            <text x="420" y="252" text-anchor="middle" font-size="9.5" fill="#7A8B99" font-family="Avenir Next, sans-serif">reweighed</text>
+
+            <!-- DPR line: Axis 1 blue: 32.9 -> 81.3 -->
+            <line x1="60" y1="154.2" x2="420" y2="57.4" stroke="#2E74B5" stroke-width="3"/>
+            <circle cx="60" cy="154.2" r="5" fill="#2E74B5"/>
+            <circle cx="420" cy="57.4" r="5" fill="#2E74B5"/>
+            <text x="68" y="150" font-size="12" fill="#2E74B5" font-family="Avenir Next, sans-serif" font-weight="800">DPR 0.329</text>
+            <text x="330" y="52" font-size="12" fill="#2E74B5" font-family="Avenir Next, sans-serif" font-weight="800">DPR 0.813</text>
+
+            <!-- MFI line: Axis 2 purple: 83.5 -> 87.0 -->
+            <line x1="60" y1="53" x2="420" y2="46" stroke="#6B4C9A" stroke-width="3"/>
+            <circle cx="60" cy="53" r="5" fill="#6B4C9A"/>
+            <circle cx="420" cy="46" r="5" fill="#6B4C9A"/>
+            <text x="68" y="42" font-size="12" fill="#6B4C9A" font-family="Avenir Next, sans-serif" font-weight="800">MFI 83.5%</text>
+            <text x="322" y="34" font-size="12" fill="#6B4C9A" font-family="Avenir Next, sans-serif" font-weight="800">MFI 87.0%</text>
+          </svg>
+          <div class="legend-row">
+            <div class="legend-item"><span class="legend-swatch" style="background:#2E74B5;"></span>Axis 1 — Demographic Parity Ratio (higher is fairer; goal ≥ 0.80)</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#6B4C9A;"></span>Axis 2 — Model Fragility Index (higher is more gameable; goal low)</div>
+          </div>
+        </div>
+
+        <div class="slope-callout">
+          <div class="headline">Both lines rise. Only one of them should.</div>
+          <p>Reweighing pushed the Demographic Parity Ratio from <span class="hl">0.329 to 0.813</span> — a fail-to-pass result on the EEOC's four-fifths rule. The same fix pushed the Model Fragility Index from <span class="hl">83.5% to 87.0%</span> — the reweighed model is <i>more</i> exploitable, not less. A procurement audit checking fairness alone would have called this tool fixed. It isn't.</p>
+        </div>
+      </div>
+
+      <div class="pull-quote">"A tool that is fair but easy to trick, or hard to trick but discriminatory, is still a legal liability." <span>— Introduction, p. 7</span></div>
+
+      <div class="mini-stat-row">
+        <div class="mini-stat"><b>2,796 / 3,332</b><span>rejected candidates flippable via one mutable feature (83.9%)</span></div>
+        <div class="mini-stat"><b>1.3 pts</b><span>accuracy cost to close most of the Axis 1 fairness gap</span></div>
+        <div class="mini-stat"><b>95.3%</b><span>post-mitigation gaming rate on Recommendation flips, up from 90.0%</span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <div class="panel">
+        <div class="panel-title">What the Model Weighs Most</div>
+        <div class="panel-sub">Run 1 feature importances (Gini) — a protected attribute ranks 3rd.</div>
+        <div class="fi-row">
+          <div class="fi-label">Recommendation</div>
+          <div class="fi-track"><div class="fi-fill" style="width:100%;background:var(--navy);"></div></div>
+          <div class="fi-val">.254</div>
+        </div>
+        <div class="fi-row">
+          <div class="fi-label">Suitability</div>
+          <div class="fi-track"><div class="fi-fill" style="width:71%;background:var(--navy);"></div></div>
+          <div class="fi-val">.181</div>
+        </div>
+        <div class="fi-row">
+          <div class="fi-label">Gender <span style="color:var(--axis2);font-weight:800;">(protected)</span></div>
+          <div class="fi-track"><div class="fi-fill" style="width:53%;background:var(--gold);"></div></div>
+          <div class="fi-val">.134</div>
+        </div>
+        <div class="fi-row">
+          <div class="fi-label">Language (×3 avg.)</div>
+          <div class="fi-track"><div class="fi-fill" style="width:27%;background:#a9b7c4;"></div></div>
+          <div class="fi-val">.068</div>
+        </div>
+        <p style="font-size:11.5px;color:#54555c;margin:8px 0 0;line-height:1.5;">Recommendation is also the single easiest feature to game (below) — the model's most-trusted signal is its most manufacturable one.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Are Flips Gaming or Genuine?</div>
+        <div class="panel-sub">Ground-truth check against the dataset's unbiased quality score, Run 1.</div>
+        <div class="split-bar">
+          <div class="split-seg gaming" style="width:89%;">89.0% Gaming</div>
+          <div class="split-seg improve" style="width:11%;">11%</div>
+        </div>
+        <table class="table-mini">
+          <tr><th>Flip Feature</th><th class="r">n</th><th class="r">Gaming Rate</th></tr>
+          <tr><td>Recommendation</td><td class="r">2,526</td><td class="r" style="color:#B0342D;">90.0%</td></tr>
+          <tr><td>Previous Experience</td><td class="r">195</td><td class="r" style="color:#96701f;">81.0%</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Procurement Verdict</div>
+        <div class="verdict-card">
+          <div class="tier">HIGH RISK — Both Axes</div>
+          <div class="crit">DPR &lt; 0.70 OR Fragility Index &gt; 60% ⇒ do not procure without remediation</div>
+        </div>
+        <p style="font-size:11px;color:#54555c;margin-top:10px;line-height:1.5;">A high-risk result on <i>either</i> axis keeps the overall tier at high risk. Run 3's fairness fix moves Axis 1 to Low Risk but Axis 2 stays above the 60% fragility ceiling — the tool does not clear to a lower tier.</p>
+        <p style="font-size:11px;color:#54555c;margin-top:10px;line-height:1.5;border-top:1px dotted var(--rule);padding-top:10px;">Note: Run 1 trains on a deliberately biased label to validate that the audit pipeline detects a known signal — it is a diagnostic instrument, not a claim about any deployed system.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== BOTTOM STRIP ===== -->
+  <div class="bottom">
+    <div class="panel">
+      <div class="panel-title">Method at a Glance</div>
+      <ul class="method-list">
+        <li><span>Dataset</span><b>FairCVdb, N = 24,000</b></li>
+        <li><span>Model</span><b>Random Forest, 200 trees, depth 8</b></li>
+        <li><span>Validation accuracy</span><b>89.6% (Run 1) · ROC-AUC 0.968</b></li>
+        <li><span>Split</span><b>80/20, stratified by gender + ethnicity</b></li>
+        <li><span>Axis 1 tools</span><b>Fairlearn — MetricFrame, DPR</b></li>
+        <li><span>Axis 2 tool</span><b>Custom flip-threshold search, 2-step budget</b></li>
+        <li><span>Mitigation</span><b>AIF360 Reweighing (Run 3)</b></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Why It Matters</div>
+      <p style="font-size:12px;line-height:1.6;color:#232323;margin:0;">Courts (<i>Mobley v. Workday</i>, 2024) now hold ATS vendors directly liable for discriminatory outcomes, and NYC Local Law 144 and the EU AI Act both mandate independent bias audits. None of that regulation asks whether a "fixed" tool can still be gamed — this framework closes that gap by testing both risks against the same model, so a vendor's fairness fix can't quietly hide a security regression.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-title">What a Procurement Team Should Require</div>
+      <ol class="asks-list">
+        <li>Independent Axis 2 re-audit after <i>any</i> Axis 1 mitigation — a fairness fix is not evidence of lower overall risk.</li>
+        <li>An explainable-AI dashboard justifying why "Recommendation" carries the most weight.</li>
+        <li>Contractual indemnification and quarterly drift monitoring on both DPR and Fragility Index.</li>
+      </ol>
+    </div>
+  </div>
+
+  <footer>
+    <b>Dual-Axis Fragility in Algorithmic Hiring</b> · Elizabeth B. Taylor · Utica University MSDS Capstone, August 2026 · Full paper and code available on request
+  </footer>
+
+</div>
+</body>
+</html>
